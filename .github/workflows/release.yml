@@ -1,0 +1,25 @@
+name: Build macOS release
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: ./build.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Spoofy-macOS
+          path: dist/Spoofy-macOS.zip
+      - name: Create prerelease
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/Spoofy-macOS.zip --title "Spoofy $GITHUB_REF_NAME" --notes-file RELEASE_NOTES.md --prerelease
