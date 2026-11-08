@@ -32,6 +32,27 @@ Spoofy runs on your Mac and connects to your iPhone. It isn't an app you install
 
 Developer Mode reduces some security protections on your iPhone. You can turn it off later in the same Settings screen. If the option still doesn't appear, check the cable and Trust prompt, then see [pymobiledevice3's troubleshooting guide](https://github.com/doronz88/pymobiledevice3/blob/master/docs/guides/troubleshooting.md).
 
+## Experimental Wi-Fi connection
+
+1. Connect your iPhone by USB, unlock it, and accept **Trust** if prompted. Make sure Developer Mode is enabled.
+2. Put your Mac and iPhone on the same Wi-Fi network. In Spoofy, click **Enable Wi-Fi connections** in the iPhone setup section and wait for it to complete.
+3. Unplug the USB cable. Turn on **Connect over Wi-Fi (experimental)**, then select and set the location again. The existing USB session doesn't automatically transfer to Wi-Fi.
+4. Keep Spoofy open and the Mac awake and on the same network. If Spoofy reports that the connection was lost, reconnect and set the location again. This mode isn't verified on every phone or network; some networks block device discovery. Wi-Fi support is intended for iOS 17 and newer.
+
+### Using an old laptop as a host
+
+An old laptop can run Spoofy (if it meets the Mac requirements) or the open-source [pymobiledevice3](https://github.com/doronz88/pymobiledevice3) command-line tools. Pair and enable Wi-Fi connections while the phone is connected to that laptop by USB. For iOS 17 or newer, its documented commands are:
+
+```sh
+pymobiledevice3 lockdown wifi-connections on
+# Unplug USB; keep both devices on the same network.
+pymobiledevice3 developer dvt simulate-location set --mobdev2 -- 32.0853 34.7818
+```
+
+The example uses Tel Aviv. Keep the laptop awake and the command running; press Ctrl+C when finished. Restore the real location with `pymobiledevice3 developer dvt simulate-location clear --mobdev2`, then verify it on the phone. Wi-Fi discovery and tunnels vary with the OS and network; see the upstream [iOS 17+ tunnel guide](https://github.com/doronz88/pymobiledevice3/blob/master/docs/guides/ios17-tunnels.md). This is a manual option, not a built-in server or an automatic reconnect service. Do not expose device-control services to the public internet.
+
+Neither an old laptop nor a normal iPhone app makes a simulated location persist indefinitely after the phone loses its developer connection. An old laptop at home can help while the phone is reachable, but doesn't by itself provide access when the phone is away from that network.
+
 ## Choose a location
 
 1. In Spoofy, leave **iOS 17 or newer** checked if your iPhone runs iOS 17 or later. You can check your version on the phone under **Settings → General → About → iOS Version**.
@@ -47,6 +68,7 @@ Spoofy also lets you save places, revisit recently set locations, move in steps,
 - **Apple silicon only:** the current download is for M-series Macs. Intel Macs and Windows aren't supported by this release.
 - **A Mac is required:** Spoofy uses iPhone developer services through a trusted computer; it isn't a standalone iPhone app.
 - **Not every app will accept the simulated location.** A successful Spoofy command doesn't guarantee another app will display or use it.
+- **Wi-Fi is experimental.** The phone and host need an active connection; leaving the network, sleep, or closing the session can end simulation.
 - **Routes are experimental.** They follow straight lines between points unless you request walking directions. Directions and search need internet access and may not be available everywhere.
 - **Unsigned preview:** macOS may warn about the download. The app isn't notarized or signed with an Apple Developer ID.
 - **Location stays simulated until restored:** stopping a route doesn't restore your real location. Verify the result on your phone after restoring.

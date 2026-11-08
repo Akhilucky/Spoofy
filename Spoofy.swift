@@ -20,6 +20,7 @@ final class Model: ObservableObject {
     @Published var status = "Connect and unlock your iPhone, then trust this Mac."
     @Published var log = ""
     @Published var modern = true
+    @Published var wireless = false
     @Published var busy = false
     @Published var route: [CLLocationCoordinate2D] = []
     @Published var running = false
@@ -115,22 +116,36 @@ final class Model: ObservableObject {
         var args = customPython == nil ? [String]() : ["-m", "pymobiledevice3"]
         if action == "reveal" {
             args += ["amfi", "reveal-developer-mode"]
+        } else if action == "wifi" {
+            args += ["lockdown", "wifi-connections", "on"]
         } else {
             args.append("developer")
             if modern { args.append("dvt") }
             args += ["simulate-location", action]
+            if wireless { args.append("--mobdev2") }
         }
         if let p = point { args += ["--", String(p.latitude), String(p.longitude)] }
         let persistent = action == "set" && modern
         let previous = (action == "set" || action == "clear") ? activeSession : nil
         if previous != nil { activeSession = nil }
-        busy = true; status = action == "reveal" ? "Revealing Developer Mode… Unlock your iPhone and accept any trust prompt." : (action == "set" ? "Connecting and setting location…" : "Restoring location…")
+        busy = true; status = action == "wifi" ? "Enabling Wi-Fi connections… Keep your iPhone connected by USB and unlocked." : action == "reveal" ? "Revealing Developer Mode… Unlock your iPhone and accept any trust prompt." : (action == "set" ? "Connecting and setting location…" : "Restoring location…")
         DispatchQueue.global(qos: .userInitiated).async {
             if let old = previous, old.isRunning { old.terminate(); old.waitUntilExit() }
             let process = Process(); let pipe = Pipe(); let ready = ReadyFlag()
             process.executableURL = URL(fileURLWithPath: python); process.arguments = args
             var environment = ProcessInfo.processInfo.environment; environment["PYTHONUNBUFFERED"] = "1"; process.environment = environment
             process.standardOutput = pipe; process.standardError = pipe
+            if persistent {
+                process.terminationHandler = { ended in
+                    DispatchQueue.main.async {
+                        if self.activeSession === ended {
+                            self.activeSession = nil
+                            if self.running { self.stop() }
+                            self.status = "Connection lost. The simulated location may have ended; reconnect and set it again."
+                        }
+                    }
+                }
+            }
             var output = ""; var ok = false
             do {
                 try process.run()
@@ -153,10 +168,11 @@ final class Model: ObservableObject {
                 }
             } catch { output = error.localizedDescription }
             DispatchQueue.main.async {
-                if ok && persistent { self.activeSession = process }
+                if ok && persistent && process.isRunning { self.activeSession = process }
+                else if ok && persistent { ok = false; output += "\nSession ended before it could be kept open." }
                 self.busy = false; self.log = output.isEmpty ? "Command completed without additional output." : output
                 if ok && action == "set", let p = point, !self.running { self.recordHistory(p) }
-                self.status = ok ? (action == "reveal" ? "Developer Mode switch revealed. Follow the steps above on your iPhone." : (action == "set" ? "Location set. You can choose another location." : "Restore command completed.")) : "Command failed or timed out. See details below."
+                self.status = ok ? (action == "wifi" ? "Wi-Fi connections enabled. Unplug USB, select Wi-Fi mode, then set the location again." : (action == "reveal" ? "Developer Mode switch revealed. Follow the steps above on your iPhone." : (action == "set" ? "Location set. You can choose another location." : "Restore command completed."))) : "Command failed or timed out. See details below."
                 completion?(ok)
             }
         }
@@ -257,6 +273,8 @@ struct ContentView: View {
                     HStack { TextField("Search for a place", text: $m.search).onSubmit { m.find() }; Button("Search") { m.find() } }
                     HStack { TextField("Latitude", text: $m.latitude); TextField("Longitude", text: $m.longitude) }
                     Toggle("iOS 17 or newer", isOn: $m.modern)
+                    Toggle("Connect over Wi-Fi (experimental)", isOn: $m.wireless).disabled(m.busy || m.running)
+                    Text("For Wi-Fi: connect by USB and unlock your iPhone, click Enable Wi-Fi below, then unplug USB and set the location again. Keep the Mac awake, Spoofy open, and both devices on the same network.").font(.caption).foregroundColor(.secondary)
                     GroupBox("iPhone setup") {
                         VStack(alignment: .leading, spacing: 6) {
                             Text("1. Connect and unlock your iPhone. Tap Trust if asked.")
@@ -265,6 +283,7 @@ struct ContentView: View {
                             Text("4. Tap Restart, unlock your phone, then confirm Turn On and enter your passcode.")
                             Text("Developer Mode reduces some device security protections. You can turn it off later in Settings.").foregroundColor(.secondary)
                             Button("Reveal Developer Mode") { m.execute("reveal") }.disabled(m.busy || m.running)
+                            Button("Enable Wi-Fi connections") { m.execute("wifi") }.disabled(m.busy || m.running)
                         }.font(.caption).frame(maxWidth: .infinity, alignment: .leading)
                     }
                     HStack { Button("Set location") { m.execute("set", point: m.selected) }.disabled(m.busy || m.running); Button("Restore real location") { m.stop(); m.execute("clear") }.disabled(m.busy) }
